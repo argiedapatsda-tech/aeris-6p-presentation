@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AERIS-6P Presentation</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  body { font-family: "Times New Roman", Times, serif; color: #fff; user-select: none; -webkit-user-select: none; }
+  #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; }
+  video { width: 100vw; height: 100vh; object-fit: contain; background: #000; display: block; }
+  body.hidecursor, body.hidecursor * { cursor: none !important; }
+
+  /* start screen */
+  #start { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+           background: radial-gradient(ellipse at center, #10263a 0%, #000 75%); z-index: 20; cursor: pointer; text-align: center; }
+  #start h1 { font-size: clamp(40px, 7vw, 96px); letter-spacing: .12em; margin: 0 0 .2em; font-weight: bold; }
+  #start p { font-size: clamp(18px, 2.2vw, 28px); margin: .3em 0; opacity: .9; }
+  #start .go { margin-top: 1.4em; padding: .55em 1.6em; border: 2px solid #fff; border-radius: 999px; font-size: clamp(20px, 2.4vw, 30px); }
+  #start .keys { position: absolute; bottom: 4vh; font-size: clamp(14px, 1.4vw, 18px); opacity: .75; line-height: 1.7; }
+  #start.loading .go::after { content: " (loading…)"; }
+
+  /* bottom bar on mouse move */
+  #bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; gap: 10px; align-items: center;
+         background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.25); border-radius: 999px; padding: 6px 12px;
+         font-size: 18px; z-index: 10; opacity: 0; transition: opacity .3s; pointer-events: none; }
+  #bar.show { opacity: 1; pointer-events: auto; }
+  #bar button { background: none; border: 0; color: #fff; font-size: 20px; cursor: pointer; padding: 4px 10px; border-radius: 8px; font-family: inherit; }
+  #bar button:hover { background: rgba(255,255,255,.18); }
+  #count { min-width: 74px; text-align: center; }
+
+  #black { position: fixed; inset: 0; background: #000; z-index: 15; display: none; }
+  #jump { position: fixed; top: 20px; right: 24px; z-index: 16; font-size: 28px; background: rgba(0,0,0,.7); padding: 6px 14px; border-radius: 10px; display: none; }
+  #err { position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center; text-align: center;
+         background: #200; font-size: 24px; padding: 40px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div id="stage"><video id="v" src="slides.mp4" preload="auto" muted playsinline disablepictureinpicture></video></div>
+
+<div id="start" class="loading">
+  <h1>AERIS-6P</h1>
+  <p>Air Environment Research &amp; Integrated Sensing – 6 Parameters</p>
+  <div class="go">Click to start</div>
+  <div class="keys">Next: click · Space · → · Page Down (clicker)&nbsp;&nbsp;|&nbsp;&nbsp;Back: ← · Page Up&nbsp;&nbsp;|&nbsp;&nbsp;Fullscreen: F&nbsp;&nbsp;|&nbsp;&nbsp;Black screen: B<br>Go to a slide: type its number, then Enter</div>
+</div>
+
+<div id="bar">
+  <button id="bPrev" title="Previous (←)">◀</button>
+  <span id="count">1 / 31</span>
+  <button id="bNext" title="Next (→)">▶</button>
+  <button id="bFull" title="Fullscreen (F)">⛶</button>
+</div>
+<div id="black"></div>
+<div id="jump"></div>
+<div id="err"><div>The slides video could not be loaded.<br><br>Make sure the whole folder was copied, so that <b>slides.mp4</b> is next to <b>index.html</b>,<br>then open index.html in Google Chrome or Microsoft Edge.</div></div>
+
+<script>
+const DATA = {"starts": [0.0, 3.3, 7.2333, 10.8667, 14.0667, 19.2, 23.0, 26.0667, 29.1333, 34.4667, 39.1, 42.1667, 45.2333, 48.3, 51.5333, 54.9667, 58.1333, 61.6667, 65.2, 68.8667, 72.6333, 76.9333, 80.2667, 83.8333, 87.3667, 94.6667, 98.7667, 106.5333, 110.0667, 113.0, 116.4333], "stops": [3.0, 6.9333, 10.5667, 13.7667, 18.9, 22.7, 25.7667, 28.8333, 34.1667, 38.8, 41.8667, 44.9333, 48.0, 51.2333, 54.6667, 57.8333, 61.3667, 64.9, 68.5667, 72.3333, 76.6333, 79.9667, 83.5333, 87.0667, 94.3667, 98.4667, 106.2333, 109.7667, 112.7, 116.1333, 119.4333], "duration": 119.733};            // starts[k] = where slide k's morph begins, stops[k] = where slide k is fully built
+const N = DATA.stops.length;
+const v = document.getElementById('v');
+const startEl = document.getElementById('start'), bar = document.getElementById('bar'), count = document.getElementById('count');
+const black = document.getElementById('black'), jump = document.getElementById('jump');
+let k = -1;            // current slide index (-1 = not started)
+let target = null;     // time to pause at while playing
+let started = false, typed = '';
+
+function updateCount() { count.textContent = (Math.max(k, 0) + 1) + ' / ' + N; }
+
+function watch() {     // pause exactly at the stop time
+  if (target === null) return;
+  if (v.currentTime >= target - 0.02 || v.ended) { v.pause(); target = null; return; }
+  if ('requestVideoFrameCallback' in v) v.requestVideoFrameCallback(watch); else requestAnimationFrame(watch);
+}
+function playTo(from, to) {
+  target = to;
+  if (Math.abs(v.currentTime - from) > 0.04) v.currentTime = from;
+  const p = v.play(); if (p && p.catch) p.catch(() => {});
+  if ('requestVideoFrameCallback' in v) v.requestVideoFrameCallback(watch); else requestAnimationFrame(watch);
+}
+function showStill(i) { target = null; v.pause(); v.currentTime = DATA.stops[i]; }
+
+function next() {
+  if (!started) return start();
+  if (target !== null) { showStill(k); return; }           // click during an animation = finish it (like PowerPoint)
+  if (k >= N - 1) return;
+  k++; updateCount(); playTo(DATA.starts[k], DATA.stops[k]);
+}
+function prev() {
+  if (!started || k <= 0) return;
+  k--; updateCount(); showStill(k);
+}
+function goTo(i) {
+  if (!started) return;
+  i = Math.max(0, Math.min(N - 1, i));
+  k = i; updateCount();
+  playTo(DATA.starts[k], DATA.stops[k]);
+}
+function fullscreen() {
+  const d = document;
+  if (!d.fullscreenElement) (d.documentElement.requestFullscreen || d.documentElement.webkitRequestFullscreen).call(d.documentElement).catch?.(() => {});
+  else d.exitFullscreen();
+}
+function start() {
+  if (started) return;
+  started = true; startEl.style.display = 'none';
+  try { if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {}
+  k = 0; updateCount(); playTo(0, DATA.stops[0]);
+}
+
+v.addEventListener('canplaythrough', () => startEl.classList.remove('loading'));
+v.addEventListener('loadeddata', () => startEl.classList.remove('loading'));
+v.addEventListener('error', () => { document.getElementById('err').style.display = 'flex'; });
+
+startEl.addEventListener('click', start);
+document.getElementById('stage').addEventListener('click', next);
+document.getElementById('bPrev').addEventListener('click', e => { e.stopPropagation(); prev(); });
+document.getElementById('bNext').addEventListener('click', e => { e.stopPropagation(); next(); });
+document.getElementById('bFull').addEventListener('click', e => { e.stopPropagation(); fullscreen(); });
+document.addEventListener('contextmenu', e => e.preventDefault());
+black.addEventListener('click', () => black.style.display = 'none');
+
+document.addEventListener('keydown', e => {
+  const key = e.key;
+  if (/^[0-9]$/.test(key)) { typed += key; jump.textContent = 'Go to slide ' + typed; jump.style.display = 'block'; return; }
+  if (key === 'Enter' && typed) { goTo(parseInt(typed, 10) - 1); typed = ''; jump.style.display = 'none'; e.preventDefault(); return; }
+  typed = ''; jump.style.display = 'none';
+  if (black.style.display === 'block' && !['b', 'B', '.'].includes(key)) { black.style.display = 'none'; e.preventDefault(); return; }
+  switch (key) {
+    case 'ArrowRight': case 'ArrowDown': case ' ': case 'PageDown': case 'Enter': case 'n': case 'N': e.preventDefault(); next(); break;
+    case 'ArrowLeft': case 'ArrowUp': case 'PageUp': case 'Backspace': case 'p': case 'P': e.preventDefault(); prev(); break;
+    case 'Home': e.preventDefault(); if (started) { k = 0; updateCount(); showStill(0); } else start(); break;
+    case 'End': e.preventDefault(); if (started) { k = N - 1; updateCount(); showStill(N - 1); } break;
+    case 'f': case 'F': fullscreen(); break;
+    case 'b': case 'B': case '.': black.style.display = black.style.display === 'block' ? 'none' : 'block'; break;
+    default: if (!started && key.length === 1) start();
+  }
+});
+
+// show the little bar and cursor while the mouse moves, hide after 2 s
+let hideT;
+document.addEventListener('mousemove', () => {
+  document.body.classList.remove('hidecursor');
+  if (started) bar.classList.add('show');
+  clearTimeout(hideT);
+  hideT = setTimeout(() => { bar.classList.remove('show'); if (started) document.body.classList.add('hidecursor'); }, 2000);
+});
+updateCount();
+</script>
+</body>
+</html>
