@@ -42,7 +42,7 @@
 </style>
 </head>
 <body>
-<div id="stage"><video id="v" src="slides.mp4?v=2" preload="auto" muted playsinline webkit-playsinline disablepictureinpicture></video></div>
+<div id="stage"><video id="v" src="slides.mp4?v=3" preload="auto" muted playsinline webkit-playsinline disablepictureinpicture></video></div>
 
 <div id="start" class="loading">
   <h1>AERIS-6P</h1>
@@ -63,7 +63,7 @@
 <div id="err"><div>The slides video could not be loaded.<br><br>Make sure the whole folder was copied, so that <b>slides.mp4</b> is next to <b>index.html</b>,<br>then open index.html in Google Chrome or Microsoft Edge.</div></div>
 
 <script>
-const DATA = {"starts": [0.0, 3.3, 7.2333, 10.8667, 14.0667, 19.2, 23.0, 26.0667, 29.1333, 34.4667, 39.1, 42.1667, 45.2333, 48.3, 51.5333, 54.9667, 58.1333, 61.6667, 65.2, 68.8667, 72.6333, 76.9333, 80.2667, 83.8333, 87.3667, 94.6667, 98.7667, 106.5333, 110.0667, 113.0, 116.4333], "stops": [3.0, 6.9333, 10.5667, 13.7667, 18.9, 22.7, 25.7667, 28.8333, 34.1667, 38.8, 41.8667, 44.9333, 48.0, 51.2333, 54.6667, 57.8333, 61.3667, 64.9, 68.5667, 72.3333, 76.6333, 79.9667, 83.5333, 87.0667, 94.3667, 98.4667, 106.2333, 109.7667, 112.7, 116.1333, 119.4333], "duration": 119.733};            // starts[k] = where slide k's morph begins, stops[k] = where slide k is fully built
+const DATA = {"starts": [0.0, 3.3, 7.2333, 10.8667, 14.0667, 19.2, 23.0, 26.0667, 29.1333, 34.4667, 39.1, 42.1667, 45.2333, 48.3, 51.5333, 54.9667, 58.1333, 61.6667, 65.2, 68.8667, 72.6333, 76.9333, 80.2667, 83.8333, 87.3667, 94.6667, 98.7667, 106.5333, 110.0667, 113.0, 116.2], "stops": [3.0, 6.9333, 10.5667, 13.7667, 18.9, 22.7, 25.7667, 28.8333, 34.1667, 38.8, 41.8667, 44.9333, 48.0, 51.2333, 54.6667, 57.8333, 61.3667, 64.9, 68.5667, 72.3333, 76.6333, 79.9667, 83.5333, 87.0667, 94.3667, 98.4667, 106.2333, 109.7667, 112.7, 115.9, 119.2], "duration": 119.5};            // starts[k] = where slide k's morph begins, stops[k] = where slide k is fully built
 const N = DATA.stops.length;
 const v = document.getElementById('v');
 const startEl = document.getElementById('start'), bar = document.getElementById('bar'), count = document.getElementById('count');
