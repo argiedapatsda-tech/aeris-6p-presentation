@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <title>AERIS-6P Presentation</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
-  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
   body { font-family: "Times New Roman", Times, serif; color: #fff; user-select: none; -webkit-user-select: none; }
   #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; }
-  video { width: 100vw; height: 100vh; object-fit: contain; background: #000; display: block; }
+  video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
   body.hidecursor, body.hidecursor * { cursor: none !important; }
 
   /* start screen */
@@ -29,6 +29,12 @@
   #bar button:hover { background: rgba(255,255,255,.18); }
   #count { min-width: 74px; text-align: center; }
 
+  /* phones and tablets have no mouse: keep the buttons on screen, and make them easy to tap */
+  body.touch #bar { bottom: calc(10px + env(safe-area-inset-bottom)); padding: 4px 8px; }
+  body.touch #bar button { font-size: 26px; min-width: 56px; min-height: 44px; }
+  body.nofs #bFull { display: none; }
+  #wait { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 12; background: rgba(0,0,0,.7); padding: 6px 16px; border-radius: 999px; font-size: 18px; display: none; }
+
   #black { position: fixed; inset: 0; background: #000; z-index: 15; display: none; }
   #jump { position: fixed; top: 20px; right: 24px; z-index: 16; font-size: 28px; background: rgba(0,0,0,.7); padding: 6px 14px; border-radius: 10px; display: none; }
   #err { position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center; text-align: center;
@@ -36,13 +42,13 @@
 </style>
 </head>
 <body>
-<div id="stage"><video id="v" src="slides.mp4" preload="auto" muted playsinline disablepictureinpicture></video></div>
+<div id="stage"><video id="v" src="slides.mp4?v=2" preload="auto" muted playsinline webkit-playsinline disablepictureinpicture></video></div>
 
 <div id="start" class="loading">
   <h1>AERIS-6P</h1>
   <p>Air Environment Research &amp; Integrated Sensing – 6 Parameters</p>
-  <div class="go">Click to start</div>
-  <div class="keys">Next: click · Space · → · Page Down (clicker)&nbsp;&nbsp;|&nbsp;&nbsp;Back: ← · Page Up&nbsp;&nbsp;|&nbsp;&nbsp;Fullscreen: F&nbsp;&nbsp;|&nbsp;&nbsp;Black screen: B<br>Go to a slide: type its number, then Enter</div>
+  <div class="go" id="go">Click to start</div>
+  <div class="keys" id="keys">Next: click · Space · → · Page Down (clicker)&nbsp;&nbsp;|&nbsp;&nbsp;Back: ← · Page Up&nbsp;&nbsp;|&nbsp;&nbsp;Fullscreen: F&nbsp;&nbsp;|&nbsp;&nbsp;Black screen: B<br>Go to a slide: type its number, then Enter</div>
 </div>
 
 <div id="bar">
@@ -51,6 +57,7 @@
   <button id="bNext" title="Next (→)">▶</button>
   <button id="bFull" title="Fullscreen (F)">⛶</button>
 </div>
+<div id="wait">Loading…</div>
 <div id="black"></div>
 <div id="jump"></div>
 <div id="err"><div>The slides video could not be loaded.<br><br>Make sure the whole folder was copied, so that <b>slides.mp4</b> is next to <b>index.html</b>,<br>then open index.html in Google Chrome or Microsoft Edge.</div></div>
@@ -67,16 +74,28 @@ let started = false, typed = '';
 
 function updateCount() { count.textContent = (Math.max(k, 0) + 1) + ' / ' + N; }
 
-function watch() {     // pause exactly at the stop time
+// The video must stop at the end of each slide, so several independent checks can stop it.
+// iPhones and iPads may not report new video frames reliably, so never rely on that signal alone.
+function checkStop() {
   if (target === null) return;
-  if (v.currentTime >= target - 0.02 || v.ended) { v.pause(); target = null; return; }
-  if ('requestVideoFrameCallback' in v) v.requestVideoFrameCallback(watch); else requestAnimationFrame(watch);
+  if (v.currentTime >= target - 0.02 || v.ended) {
+    const t = target; target = null; v.pause();
+    if (v.currentTime > t + 0.05) v.currentTime = t;   // ran past the stop: go back to it
+  }
 }
+function watchFrames() {
+  checkStop();
+  if (target !== null && 'requestVideoFrameCallback' in v) v.requestVideoFrameCallback(watchFrames);
+}
+setInterval(checkStop, 15);
+v.addEventListener('timeupdate', checkStop);
+v.addEventListener('play', () => { if (target === null) v.pause(); });   // the video only plays when a click asks it to
 function playTo(from, to) {
   target = to;
   if (Math.abs(v.currentTime - from) > 0.04) v.currentTime = from;
-  const p = v.play(); if (p && p.catch) p.catch(() => {});
-  if ('requestVideoFrameCallback' in v) v.requestVideoFrameCallback(watch); else requestAnimationFrame(watch);
+  const p = v.play();
+  if (p && p.catch) p.catch(() => { if (target !== null) showStill(k); });   // browser refused to play: show the finished slide
+  watchFrames();
 }
 function showStill(i) { target = null; v.pause(); v.currentTime = DATA.stops[i]; }
 
@@ -96,17 +115,40 @@ function goTo(i) {
   k = i; updateCount();
   playTo(DATA.starts[k], DATA.stops[k]);
 }
+const root = document.documentElement;
+const fsRequest = root.requestFullscreen || root.webkitRequestFullscreen;
+const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+function enterFullscreen() {
+  if (!fsRequest || fsElement()) return;
+  try { const r = fsRequest.call(root); if (r && r.catch) r.catch(() => {}); } catch (e) {}
+}
 function fullscreen() {
-  const d = document;
-  if (!d.fullscreenElement) (d.documentElement.requestFullscreen || d.documentElement.webkitRequestFullscreen).call(d.documentElement).catch?.(() => {});
-  else d.exitFullscreen();
+  if (!fsElement()) return enterFullscreen();
+  (document.exitFullscreen || document.webkitExitFullscreen).call(document);
 }
 function start() {
   if (started) return;
   started = true; startEl.style.display = 'none';
-  try { if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {}
+  if (isTouch) bar.classList.add('show');
+  enterFullscreen();
   k = 0; updateCount(); playTo(0, DATA.stops[0]);
 }
+
+const isTouch = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+if (isTouch) {
+  document.body.classList.add('touch');
+  startEl.classList.remove('loading');   // phones wait for the first tap before loading the video
+  document.getElementById('go').textContent = 'Tap to start';
+  document.getElementById('keys').innerHTML = 'Next: tap the screen or ▶&nbsp;&nbsp;|&nbsp;&nbsp;Back: ◀<br>Turn your device sideways for a bigger picture';
+}
+if (!fsRequest) document.body.classList.add('nofs');
+const waitEl = document.getElementById('wait');
+let waitT;
+function showWait() { clearTimeout(waitT); waitT = setTimeout(() => { waitEl.style.display = 'block'; }, 400); }
+function hideWait() { clearTimeout(waitT); waitEl.style.display = 'none'; }
+v.addEventListener('waiting', showWait);
+v.addEventListener('seeking', showWait);
+['playing', 'seeked', 'canplay', 'pause'].forEach(e => v.addEventListener(e, hideWait));
 
 v.addEventListener('canplaythrough', () => startEl.classList.remove('loading'));
 v.addEventListener('loadeddata', () => startEl.classList.remove('loading'));
@@ -140,6 +182,7 @@ document.addEventListener('keydown', e => {
 // show the little bar and cursor while the mouse moves, hide after 2 s
 let hideT;
 document.addEventListener('mousemove', () => {
+  if (isTouch) return;   // tapping also sends a mouse move; the buttons stay on screen
   document.body.classList.remove('hidecursor');
   if (started) bar.classList.add('show');
   clearTimeout(hideT);
